@@ -1,0 +1,1287 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Endless Runner - Estilo Anime</title>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap');
+        
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            background-color: #000;
+            color: #fff;
+            font-family: 'Press Start 2P', cursive;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            min-height: 100vh;
+            overflow: hidden;
+            position: relative;
+        }
+        
+        #game-container {
+            position: relative;
+            width: 100%;
+            max-width: 800px;
+            height: 300px;
+            margin: 0 auto;
+            overflow: hidden;
+            border: 2px solid #333;
+            box-shadow: 0 0 20px rgba(255, 255, 255, 0.1);
+        }
+        
+        #game-canvas {
+            background-color: #111;
+            width: 100%;
+            height: 100%;
+            display: block;
+        }
+        
+        #score-container {
+            position: absolute;
+            top: 20px;
+            right: 20px;
+            text-align: right;
+            font-size: 14px;
+            z-index: 10;
+        }
+        
+        #current-score, #best-score {
+            margin-bottom: 10px;
+        }
+        
+        .overlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            background-color: rgba(0, 0, 0, 0.7);
+            z-index: 20;
+        }
+        
+        #start-screen {
+            text-align: center;
+        }
+        
+        #game-over-screen {
+            text-align: center;
+            display: none;
+        }
+        
+        .title {
+            font-size: 24px;
+            margin-bottom: 20px;
+            color: #fff;
+            text-shadow: 0 0 10px rgba(255, 255, 255, 0.5);
+        }
+        
+        .subtitle {
+            font-size: 14px;
+            margin-bottom: 30px;
+            color: #aaa;
+        }
+        
+        .final-score {
+            font-size: 18px;
+            margin-bottom: 20px;
+            color: #fff;
+        }
+        
+        .btn {
+            background-color: transparent;
+            border: 2px solid #fff;
+            color: #fff;
+            padding: 10px 20px;
+            font-family: 'Press Start 2P', cursive;
+            font-size: 14px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            margin-top: 20px;
+        }
+        
+        .btn:hover {
+            background-color: #fff;
+            color: #000;
+            transform: scale(1.05);
+        }
+        
+        .controls {
+            margin-top: 20px;
+            font-size: 12px;
+            color: #aaa;
+        }
+        
+        /* Responsividade */
+        @media (max-width: 768px) {
+            #game-container {
+                height: 250px;
+            }
+            
+            .title {
+                font-size: 20px;
+            }
+            
+            .subtitle, .btn {
+                font-size: 12px;
+            }
+            
+            #score-container {
+                font-size: 12px;
+            }
+        }
+        
+        @media (max-width: 480px) {
+            #game-container {
+                height: 200px;
+            }
+            
+            .title {
+                font-size: 18px;
+            }
+            
+            .subtitle, .controls {
+                font-size: 10px;
+            }
+            
+            #score-container {
+                top: 10px;
+                right: 10px;
+                font-size: 10px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div id="game-container">
+        <canvas id="game-canvas"></canvas>
+        
+        <div id="score-container">
+            <div id="current-score">SCORE: 0</div>
+            <div id="best-score">BEST: 0</div>
+        </div>
+        
+        <div id="start-screen" class="overlay">
+            <h1 class="title">ENDLESS RUNNER</h1>
+            <p class="subtitle">Corra, pule e sobreviva o máximo que puder!</p>
+            <button id="start-button" class="btn">INICIAR</button>
+            <div class="controls">
+                CONTROLES: ESPAÇO / SETA PARA CIMA / TOQUE NA TELA
+            </div>
+        </div>
+        
+        <div id="game-over-screen" class="overlay">
+            <h1 class="title">GAME OVER</h1>
+            <p class="final-score">PONTUAÇÃO: <span id="final-score">0</span></p>
+            <p class="final-score">MELHOR: <span id="final-best-score">0</span></p>
+            <button id="restart-button" class="btn">JOGAR NOVAMENTE</button>
+        </div>
+    </div>
+
+    <script>
+        // Configuração do jogo
+        const GAME_STATE = {
+            MENU: 0,
+            PLAYING: 1,
+            GAME_OVER: 2
+        };
+
+        // Classe principal do jogo
+        class Game {
+            constructor() {
+                // Elementos do DOM
+                this.canvas = document.getElementById('game-canvas');
+                this.ctx = this.canvas.getContext('2d');
+                this.startScreen = document.getElementById('start-screen');
+                this.gameOverScreen = document.getElementById('game-over-screen');
+                this.startButton = document.getElementById('start-button');
+                this.restartButton = document.getElementById('restart-button');
+                this.currentScoreElement = document.getElementById('current-score');
+                this.bestScoreElement = document.getElementById('best-score');
+                this.finalScoreElement = document.getElementById('final-score');
+                this.finalBestScoreElement = document.getElementById('final-best-score');
+                
+                // Configuração do jogo
+                this.state = GAME_STATE.MENU;
+                this.score = 0;
+                this.bestScore = localStorage.getItem('bestScore') || 0;
+                this.speed = 5;
+                this.speedIncrement = 0.001;
+                this.gameStarted = false;
+                this.isMobile = this.checkIfMobile();
+                
+                // Inicialização
+                this.resizeCanvas();
+                this.setupEventListeners();
+                this.loadAssets();
+                
+                // Atualizar melhor pontuação na tela
+                this.bestScoreElement.textContent = `BEST: ${this.bestScore}`;
+            }
+            
+            // Verificar se o dispositivo é móvel
+            checkIfMobile() {
+                return /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+            }
+            
+            // Configuração do tamanho do canvas
+            resizeCanvas() {
+                const container = document.getElementById('game-container');
+                this.canvas.width = container.clientWidth;
+                this.canvas.height = container.clientHeight;
+                
+                // Atualizar posição do chão se o jogo já estiver em andamento
+                if (this.player) {
+                    this.player.groundY = this.canvas.height - 40;
+                }
+            }
+            
+            // Configuração dos event listeners
+            setupEventListeners() {
+                // Redimensionar o canvas quando a janela for redimensionada
+                window.addEventListener('resize', () => this.resizeCanvas());
+                
+                // Botões de início e reinício
+                this.startButton.addEventListener('click', () => this.start());
+                this.restartButton.addEventListener('click', () => this.restart());
+                
+                // Controles de teclado
+                document.addEventListener('keydown', (e) => {
+                    if ((e.code === 'Space' || e.code === 'ArrowUp') && 
+                        this.state === GAME_STATE.PLAYING && 
+                        !this.player.isJumping) {
+                        this.player.jump();
+                        this.playSound('jump');
+                        e.preventDefault(); // Prevenir comportamento padrão (scroll)
+                    }
+                });
+                
+                // Controles de toque para dispositivos móveis
+                this.canvas.addEventListener('touchstart', (e) => {
+                    if (this.state === GAME_STATE.PLAYING && !this.player.isJumping) {
+                        this.player.jump();
+                        this.playSound('jump');
+                        e.preventDefault(); // Prevenir comportamento padrão (scroll)
+                    }
+                }, { passive: false });
+                
+                // Controle de clique do mouse (para desktop)
+                this.canvas.addEventListener('click', (e) => {
+                    if (this.state === GAME_STATE.PLAYING && !this.player.isJumping) {
+                        this.player.jump();
+                        this.playSound('jump');
+                    }
+                });
+                
+                // Prevenir comportamentos padrão em dispositivos móveis
+                document.addEventListener('touchmove', (e) => {
+                    if (this.state === GAME_STATE.PLAYING) {
+                        e.preventDefault();
+                    }
+                }, { passive: false });
+            }
+            
+            // Carregamento de assets (imagens e sons)
+            loadAssets() {
+                // Sons
+                this.sounds = {
+                    jump: new Audio('https://assets.mixkit.co/sfx/preview/mixkit-arcade-retro-jump-223.mp3'),
+                    gameOver: new Audio('https://assets.mixkit.co/sfx/preview/mixkit-player-losing-or-failing-2042.mp3')
+                };
+                
+                // Pré-carregar sons
+                for (const sound in this.sounds) {
+                    this.sounds[sound].load();
+                }
+                
+                // Criar sprites e imagens de fundo diretamente com canvas
+                this.createPlayerSprites();
+                this.createObstacleSprites();
+                this.createBackgroundLayers();
+                
+                // Inicializar objetos do jogo após criar os sprites
+                this.initGameObjects();
+                
+                // Jogo pronto para começar
+                console.log('Game assets loaded and initialized');
+                this.gameStarted = true;
+                
+                // Mostrar mensagem específica para dispositivos móveis
+                if (this.isMobile) {
+                    document.querySelector('.controls').textContent = 'CONTROLE: TOQUE NA TELA PARA PULAR';
+                }
+            }
+            
+            // Criar sprites do jogador
+            createPlayerSprites() {
+                this.images = {};
+                
+                // Criar sprite sheet de corrida (8 frames)
+                const runCanvas = document.createElement('canvas');
+                runCanvas.width = 64 * 8; // 8 frames de 64px
+                runCanvas.height = 64;
+                const runCtx = runCanvas.getContext('2d');
+                
+                // Desenhar frames de corrida
+                for (let i = 0; i < 8; i++) {
+                    this.drawCharacterFrame(runCtx, i * 64, 0, i % 4 < 2);
+                }
+                
+                // Criar sprite de pulo
+                const jumpCanvas = document.createElement('canvas');
+                jumpCanvas.width = 64;
+                jumpCanvas.height = 64;
+                const jumpCtx = jumpCanvas.getContext('2d');
+                
+                // Desenhar frame de pulo
+                this.drawCharacterFrame(jumpCtx, 0, 0, true, true);
+                
+                // Salvar sprites
+                this.images.playerRun = runCanvas;
+                this.images.playerJump = jumpCanvas;
+            }
+            
+            // Desenhar um frame do personagem
+            drawCharacterFrame(ctx, x, y, rightLeg, jumping = false) {
+                // Cores
+                const bodyColor = '#4287f5';
+                const outlineColor = '#000000';
+                const headColor = '#ffb347';
+                
+                ctx.save();
+                ctx.translate(x, y);
+                
+                // Desenhar cabeça
+                ctx.fillStyle = headColor;
+                ctx.strokeStyle = outlineColor;
+                ctx.lineWidth = 2;
+                ctx.beginPath();
+                ctx.arc(32, 15, 12, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.stroke();
+                
+                // Desenhar olhos
+                ctx.fillStyle = '#ffffff';
+                ctx.beginPath();
+                ctx.arc(28, 12, 3, 0, Math.PI * 2);
+                ctx.arc(36, 12, 3, 0, Math.PI * 2);
+                ctx.fill();
+                
+                ctx.fillStyle = '#000000';
+                ctx.beginPath();
+                ctx.arc(28, 12, 1.5, 0, Math.PI * 2);
+                ctx.arc(36, 12, 1.5, 0, Math.PI * 2);
+                ctx.fill();
+                
+                // Desenhar corpo
+                ctx.fillStyle = bodyColor;
+                ctx.strokeStyle = outlineColor;
+                ctx.beginPath();
+                ctx.roundRect(26, 27, 12, 20, 3);
+                ctx.fill();
+                ctx.stroke();
+                
+                // Desenhar braços
+                if (jumping) {
+                    // Braços levantados para pulo
+                    ctx.beginPath();
+                    ctx.moveTo(26, 30);
+                    ctx.lineTo(18, 20);
+                    ctx.lineTo(16, 22);
+                    ctx.lineTo(24, 33);
+                    ctx.fill();
+                    ctx.stroke();
+                    
+                    ctx.beginPath();
+                    ctx.moveTo(38, 30);
+                    ctx.lineTo(46, 20);
+                    ctx.lineTo(48, 22);
+                    ctx.lineTo(40, 33);
+                    ctx.fill();
+                    ctx.stroke();
+                } else {
+                    // Braços balançando para corrida
+                    ctx.beginPath();
+                    ctx.moveTo(26, 30);
+                    ctx.lineTo(20, rightLeg ? 40 : 25);
+                    ctx.lineTo(18, rightLeg ? 42 : 27);
+                    ctx.lineTo(24, rightLeg ? 32 : 32);
+                    ctx.fill();
+                    ctx.stroke();
+                    
+                    ctx.beginPath();
+                    ctx.moveTo(38, 30);
+                    ctx.lineTo(44, rightLeg ? 25 : 40);
+                    ctx.lineTo(46, rightLeg ? 27 : 42);
+                    ctx.lineTo(40, rightLeg ? 32 : 32);
+                    ctx.fill();
+                    ctx.stroke();
+                }
+                
+                // Desenhar pernas
+                if (jumping) {
+                    // Pernas flexionadas para pulo
+                    ctx.beginPath();
+                    ctx.moveTo(28, 47);
+                    ctx.lineTo(24, 55);
+                    ctx.lineTo(22, 53);
+                    ctx.lineTo(26, 45);
+                    ctx.fill();
+                    ctx.stroke();
+                    
+                    ctx.beginPath();
+                    ctx.moveTo(36, 47);
+                    ctx.lineTo(40, 55);
+                    ctx.lineTo(42, 53);
+                    ctx.lineTo(38, 45);
+                    ctx.fill();
+                    ctx.stroke();
+                } else {
+                    // Pernas em movimento para corrida
+                    ctx.beginPath();
+                    ctx.moveTo(28, 47);
+                    ctx.lineTo(rightLeg ? 22 : 28, 60);
+                    ctx.lineTo(rightLeg ? 20 : 26, 62);
+                    ctx.lineTo(26, 47);
+                    ctx.fill();
+                    ctx.stroke();
+                    
+                    ctx.beginPath();
+                    ctx.moveTo(36, 47);
+                    ctx.lineTo(rightLeg ? 36 : 42, 60);
+                    ctx.lineTo(rightLeg ? 38 : 44, 62);
+                    ctx.lineTo(38, 47);
+                    ctx.fill();
+                    ctx.stroke();
+                }
+                
+                // Desenhar detalhes (faixa na cabeça para estilo samurai/anime)
+                ctx.fillStyle = '#ff4757';
+                ctx.beginPath();
+                ctx.rect(20, 10, 24, 4);
+                ctx.fill();
+                ctx.stroke();
+                
+                // Desenhar detalhes da roupa
+                ctx.strokeStyle = '#000000';
+                ctx.beginPath();
+                ctx.moveTo(26, 37);
+                ctx.lineTo(38, 37);
+                ctx.stroke();
+                
+                ctx.restore();
+            }
+            
+            // Criar sprites de obstáculos
+            createObstacleSprites() {
+                // Obstáculo 1: Rocha pontiaguda
+                const obstacle1Canvas = document.createElement('canvas');
+                obstacle1Canvas.width = 30;
+                obstacle1Canvas.height = 50;
+                const obstacle1Ctx = obstacle1Canvas.getContext('2d');
+                
+                obstacle1Ctx.fillStyle = '#8B4513'; // Marrom
+                obstacle1Ctx.strokeStyle = '#000000';
+                obstacle1Ctx.lineWidth = 2;
+                
+                // Base da rocha
+                obstacle1Ctx.beginPath();
+                obstacle1Ctx.moveTo(0, 50);
+                obstacle1Ctx.lineTo(30, 50);
+                obstacle1Ctx.lineTo(25, 20);
+                obstacle1Ctx.lineTo(20, 5);
+                obstacle1Ctx.lineTo(15, 0);
+                obstacle1Ctx.lineTo(10, 5);
+                obstacle1Ctx.lineTo(5, 20);
+                obstacle1Ctx.closePath();
+                obstacle1Ctx.fill();
+                obstacle1Ctx.stroke();
+                
+                // Detalhes da rocha
+                obstacle1Ctx.strokeStyle = '#5D4037';
+                obstacle1Ctx.lineWidth = 1;
+                obstacle1Ctx.beginPath();
+                obstacle1Ctx.moveTo(10, 30);
+                obstacle1Ctx.lineTo(20, 35);
+                obstacle1Ctx.moveTo(15, 15);
+                obstacle1Ctx.lineTo(20, 25);
+                obstacle1Ctx.stroke();
+                
+                // Obstáculo 2: Caixa baixa
+                const obstacle2Canvas = document.createElement('canvas');
+                obstacle2Canvas.width = 40;
+                obstacle2Canvas.height = 30;
+                const obstacle2Ctx = obstacle2Canvas.getContext('2d');
+                
+                obstacle2Ctx.fillStyle = '#607D8B'; // Cinza azulado
+                obstacle2Ctx.strokeStyle = '#000000';
+                obstacle2Ctx.lineWidth = 2;
+                
+                // Caixa
+                obstacle2Ctx.beginPath();
+                obstacle2Ctx.rect(0, 0, 40, 30);
+                obstacle2Ctx.fill();
+                obstacle2Ctx.stroke();
+                
+                // Detalhes da caixa
+                obstacle2Ctx.strokeStyle = '#455A64';
+                obstacle2Ctx.lineWidth = 1;
+                obstacle2Ctx.beginPath();
+                obstacle2Ctx.moveTo(0, 10);
+                obstacle2Ctx.lineTo(40, 10);
+                obstacle2Ctx.moveTo(0, 20);
+                obstacle2Ctx.lineTo(40, 20);
+                obstacle2Ctx.moveTo(13, 0);
+                obstacle2Ctx.lineTo(13, 30);
+                obstacle2Ctx.moveTo(26, 0);
+                obstacle2Ctx.lineTo(26, 30);
+                obstacle2Ctx.stroke();
+                
+                // Obstáculo 3: Inimigo pequeno
+                const obstacle3Canvas = document.createElement('canvas');
+                obstacle3Canvas.width = 35;
+                obstacle3Canvas.height = 35;
+                const obstacle3Ctx = obstacle3Canvas.getContext('2d');
+                
+                obstacle3Ctx.fillStyle = '#9C27B0'; // Roxo
+                obstacle3Ctx.strokeStyle = '#000000';
+                obstacle3Ctx.lineWidth = 2;
+                
+                // Corpo do inimigo
+                obstacle3Ctx.beginPath();
+                obstacle3Ctx.arc(17.5, 17.5, 15, 0, Math.PI * 2);
+                obstacle3Ctx.fill();
+                obstacle3Ctx.stroke();
+                
+                // Olhos do inimigo
+                obstacle3Ctx.fillStyle = '#FFFFFF';
+                obstacle3Ctx.beginPath();
+                obstacle3Ctx.arc(12, 12, 4, 0, Math.PI * 2);
+                obstacle3Ctx.arc(23, 12, 4, 0, Math.PI * 2);
+                obstacle3Ctx.fill();
+                
+                obstacle3Ctx.fillStyle = '#FF0000';
+                obstacle3Ctx.beginPath();
+                obstacle3Ctx.arc(12, 12, 2, 0, Math.PI * 2);
+                obstacle3Ctx.arc(23, 12, 2, 0, Math.PI * 2);
+                obstacle3Ctx.fill();
+                
+                // Boca do inimigo
+                obstacle3Ctx.strokeStyle = '#FFFFFF';
+                obstacle3Ctx.lineWidth = 2;
+                obstacle3Ctx.beginPath();
+                obstacle3Ctx.arc(17.5, 22, 7, 0, Math.PI);
+                obstacle3Ctx.stroke();
+                
+                // Salvar sprites de obstáculos
+                this.images.obstacle1 = obstacle1Canvas;
+                this.images.obstacle2 = obstacle2Canvas;
+                this.images.obstacle3 = obstacle3Canvas;
+            }
+            
+            // Criar camadas de fundo
+            createBackgroundLayers() {
+                // Camada de fundo distante (montanhas)
+                const bgFarCanvas = document.createElement('canvas');
+                bgFarCanvas.width = this.canvas.width;
+                bgFarCanvas.height = this.canvas.height - 40;
+                const bgFarCtx = bgFarCanvas.getContext('2d');
+                
+                // Gradiente de fundo
+                const farGradient = bgFarCtx.createLinearGradient(0, 0, 0, bgFarCanvas.height);
+                farGradient.addColorStop(0, '#000033');
+                farGradient.addColorStop(1, '#330033');
+                bgFarCtx.fillStyle = farGradient;
+                bgFarCtx.fillRect(0, 0, bgFarCanvas.width, bgFarCanvas.height);
+                
+                // Montanhas distantes
+                bgFarCtx.fillStyle = '#1a1a2e';
+                for (let i = 0; i < bgFarCanvas.width; i += 120) {
+                    const height = Math.random() * 50 + 30;
+                    bgFarCtx.beginPath();
+                    bgFarCtx.moveTo(i, bgFarCanvas.height);
+                    bgFarCtx.lineTo(i + 60, bgFarCanvas.height - height);
+                    bgFarCtx.lineTo(i + 120, bgFarCanvas.height);
+                    bgFarCtx.fill();
+                }
+                
+                // Estrelas
+                bgFarCtx.fillStyle = '#FFFFFF';
+                for (let i = 0; i < 100; i++) {
+                    const x = Math.random() * bgFarCanvas.width;
+                    const y = Math.random() * (bgFarCanvas.height * 0.7);
+                    const size = Math.random() * 2 + 0.5;
+                    bgFarCtx.beginPath();
+                    bgFarCtx.arc(x, y, size, 0, Math.PI * 2);
+                    bgFarCtx.fill();
+                }
+                
+                // Camada de fundo média (colinas)
+                const bgMidCanvas = document.createElement('canvas');
+                bgMidCanvas.width = this.canvas.width;
+                bgMidCanvas.height = this.canvas.height - 40;
+                const bgMidCtx = bgMidCanvas.getContext('2d');
+                
+                // Colinas médias
+                bgMidCtx.fillStyle = '#2c2c54';
+                for (let i = 0; i < bgMidCanvas.width; i += 80) {
+                    const height = Math.random() * 40 + 20;
+                    bgMidCtx.beginPath();
+                    bgMidCtx.moveTo(i, bgMidCanvas.height);
+                    bgMidCtx.quadraticCurveTo(i + 40, bgMidCanvas.height - height, i + 80, bgMidCanvas.height);
+                    bgMidCtx.fill();
+                }
+                
+                // Camada de fundo próxima (árvores/estruturas)
+                const bgNearCanvas = document.createElement('canvas');
+                bgNearCanvas.width = this.canvas.width;
+                bgNearCanvas.height = this.canvas.height - 40;
+                const bgNearCtx = bgNearCanvas.getContext('2d');
+                
+                // Estruturas próximas
+                for (let i = 0; i < bgNearCanvas.width; i += 60) {
+                    if (Math.random() > 0.3) {
+                        // Árvore ou estrutura
+                        const height = Math.random() * 60 + 40;
+                        const width = Math.random() * 20 + 10;
+                        
+                        if (Math.random() > 0.5) {
+                            // Árvore
+                            bgNearCtx.fillStyle = '#3c6382';
+                            bgNearCtx.fillRect(i, bgNearCanvas.height - height, width, height);
+                            
+                            bgNearCtx.fillStyle = '#38ada9';
+                            bgNearCtx.beginPath();
+                            bgNearCtx.arc(i + width/2, bgNearCanvas.height - height - 15, 20, 0, Math.PI * 2);
+                            bgNearCtx.fill();
+                        } else {
+                            // Estrutura
+                            bgNearCtx.fillStyle = '#40407a';
+                            bgNearCtx.fillRect(i, bgNearCanvas.height - height, width, height);
+                            
+                            // Janelas
+                            bgNearCtx.fillStyle = '#ffda79';
+                            for (let j = 0; j < 3; j++) {
+                                for (let k = 0; k < 2; k++) {
+                                    if (Math.random() > 0.3) {
+                                        bgNearCtx.fillRect(i + 3 + k * (width/2 - 3), bgNearCanvas.height - height + 10 + j * 15, width/4, 5);
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+                
+                // Salvar camadas de fundo
+                this.images.bgFar = bgFarCanvas;
+                this.images.bgMid = bgMidCanvas;
+                this.images.bgNear = bgNearCanvas;
+            }
+            
+            // Inicialização dos objetos do jogo
+            initGameObjects() {
+                // Posição do chão
+                const groundY = this.canvas.height - 40;
+                
+                // Inicializar o jogador
+                this.player = new Player(this, 80, groundY, this.images.playerRun, this.images.playerJump);
+                
+                // Inicializar o fundo com parallax
+                this.background = new Background(this, [
+                    { image: this.images.bgFar, speed: 0.2 },
+                    { image: this.images.bgMid, speed: 0.4 },
+                    { image: this.images.bgNear, speed: 0.8 }
+                ]);
+                
+                // Inicializar obstáculos
+                this.obstacles = [];
+                this.obstacleTimer = 0;
+                this.obstacleInterval = 1500; // Tempo em ms entre obstáculos
+            }
+            
+            // Iniciar o jogo
+            start() {
+                if (this.gameStarted) {
+                    this.state = GAME_STATE.PLAYING;
+                    this.score = 0;
+                    this.speed = 5;
+                    this.obstacles = [];
+                    this.startScreen.style.display = 'none';
+                    this.lastTime = 0;
+                    
+                    // Iniciar o loop do jogo
+                    requestAnimationFrame((timestamp) => this.gameLoop(timestamp));
+                    
+                    // Feedback visual ao iniciar
+                    this.canvas.style.boxShadow = '0 0 20px rgba(255, 255, 255, 0.3)';
+                    setTimeout(() => {
+                        this.canvas.style.boxShadow = '0 0 20px rgba(255, 255, 255, 0.1)';
+                    }, 300);
+                }
+            }
+            
+            // Reiniciar o jogo
+            restart() {
+                this.gameOverScreen.style.display = 'none';
+                this.start();
+            }
+            
+            // Loop principal do jogo
+            gameLoop(timestamp) {
+                // Calcular delta time para animações suaves
+                const deltaTime = timestamp - (this.lastTime || timestamp);
+                this.lastTime = timestamp;
+                
+                // Limitar o delta time para evitar problemas com tabs inativas
+                const limitedDelta = Math.min(deltaTime, 50);
+                
+                // Limpar o canvas
+                this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
+                
+                if (this.state === GAME_STATE.PLAYING) {
+                    // Atualizar a velocidade do jogo
+                    this.speed += this.speedIncrement * limitedDelta;
+                    
+                    // Atualizar a pontuação
+                    this.score += limitedDelta * 0.01;
+                    this.currentScoreElement.textContent = `SCORE: ${Math.floor(this.score)}`;
+                    
+                    // Atualizar e desenhar o fundo
+                    this.background.update(limitedDelta, this.speed);
+                    this.background.draw();
+                    
+                    // Atualizar e desenhar o jogador
+                    this.player.update(limitedDelta);
+                    this.player.draw();
+                    
+                    // Gerenciar obstáculos
+                    this.obstacleTimer += limitedDelta;
+                    if (this.obstacleTimer > this.obstacleInterval) {
+                        this.addObstacle();
+                        this.obstacleTimer = 0;
+                        // Diminuir o intervalo entre obstáculos conforme o jogo avança
+                        this.obstacleInterval = Math.max(800, this.obstacleInterval - 10);
+                    }
+                    
+                    // Atualizar e desenhar obstáculos
+                    this.updateObstacles(limitedDelta);
+                    
+                    // Verificar colisões
+                    this.checkCollisions();
+                    
+                    // Continuar o loop do jogo
+                    requestAnimationFrame((timestamp) => this.gameLoop(timestamp));
+                }
+            }
+            
+            // Adicionar um novo obstáculo
+            addObstacle() {
+                const obstacleTypes = [
+                    { image: this.images.obstacle1, width: 30, height: 50, type: 'tall' },
+                    { image: this.images.obstacle2, width: 40, height: 30, type: 'wide' },
+                    { image: this.images.obstacle3, width: 35, height: 35, type: 'medium' }
+                ];
+                
+                // Selecionar tipo de obstáculo aleatoriamente
+                const typeIndex = Math.floor(Math.random() * obstacleTypes.length);
+                const type = obstacleTypes[typeIndex];
+                
+                // Criar o obstáculo
+                const obstacle = new Obstacle(
+                    this,
+                    this.canvas.width,
+                    this.canvas.height - 40 - type.height,
+                    type.width,
+                    type.height,
+                    type.image,
+                    type.type
+                );
+                
+                // Adicionar à lista de obstáculos
+                this.obstacles.push(obstacle);
+                
+                // Ocasionalmente adicionar um segundo obstáculo próximo (mais difícil)
+                if (this.score > 100 && Math.random() < 0.3) {
+                    const secondTypeIndex = Math.floor(Math.random() * obstacleTypes.length);
+                    const secondType = obstacleTypes[secondTypeIndex];
+                    
+                    const spacing = Math.random() * 100 + 80; // Espaçamento entre 80 e 180 pixels
+                    
+                    const secondObstacle = new Obstacle(
+                        this,
+                        this.canvas.width + spacing,
+                        this.canvas.height - 40 - secondType.height,
+                        secondType.width,
+                        secondType.height,
+                        secondType.image,
+                        secondType.type
+                    );
+                    
+                    this.obstacles.push(secondObstacle);
+                }
+            }
+            
+            // Atualizar todos os obstáculos
+            updateObstacles(deltaTime) {
+                for (let i = this.obstacles.length - 1; i >= 0; i--) {
+                    const obstacle = this.obstacles[i];
+                    obstacle.update(deltaTime, this.speed);
+                    obstacle.draw();
+                    
+                    // Remover obstáculos que saíram da tela
+                    if (obstacle.x + obstacle.width < 0) {
+                        this.obstacles.splice(i, 1);
+                    }
+                }
+            }
+            
+            // Verificar colisões entre o jogador e os obstáculos
+            checkCollisions() {
+                for (const obstacle of this.obstacles) {
+                    if (this.player.checkCollision(obstacle)) {
+                        this.gameOver();
+                        break;
+                    }
+                }
+            }
+            
+            // Fim de jogo
+            gameOver() {
+                this.state = GAME_STATE.GAME_OVER;
+                this.playSound('gameOver');
+                
+                // Atualizar melhor pontuação
+                const finalScore = Math.floor(this.score);
+                if (finalScore > this.bestScore) {
+                    this.bestScore = finalScore;
+                    localStorage.setItem('bestScore', this.bestScore);
+                }
+                
+                // Atualizar elementos da tela de game over
+                this.finalScoreElement.textContent = finalScore;
+                this.finalBestScoreElement.textContent = this.bestScore;
+                this.bestScoreElement.textContent = `BEST: ${this.bestScore}`;
+                
+                // Mostrar tela de game over
+                this.gameOverScreen.style.display = 'flex';
+                
+                // Feedback visual ao perder
+                this.canvas.style.boxShadow = '0 0 20px rgba(255, 0, 0, 0.3)';
+                setTimeout(() => {
+                    this.canvas.style.boxShadow = '0 0 20px rgba(255, 255, 255, 0.1)';
+                }, 500);
+            }
+            
+            // Tocar efeitos sonoros
+            playSound(soundName) {
+                if (this.sounds[soundName]) {
+                    // Clonar o som para permitir sobreposição
+                    const sound = this.sounds[soundName].cloneNode();
+                    sound.volume = soundName === 'jump' ? 0.5 : 0.7; // Ajustar volume
+                    sound.play().catch(e => console.log("Audio play error:", e));
+                }
+            }
+        }
+
+        // Classe do jogador
+        class Player {
+            constructor(game, x, groundY, runSpriteSheet, jumpSprite) {
+                this.game = game;
+                this.x = x;
+                this.y = groundY;
+                this.groundY = groundY;
+                this.width = 50;
+                this.height = 60;
+                this.runSpriteSheet = runSpriteSheet;
+                this.jumpSprite = jumpSprite;
+                
+                // Configuração da animação de corrida
+                this.frameWidth = 64;  // Largura de cada frame no sprite sheet
+                this.frameHeight = 64; // Altura de cada frame no sprite sheet
+                this.totalFrames = 8;  // Total de frames na animação de corrida
+                this.currentFrame = 0;
+                this.frameTimer = 0;
+                this.frameInterval = 100; // Tempo entre frames em ms
+                
+                // Configuração do pulo
+                this.isJumping = false;
+                this.jumpVelocity = 0;
+                this.gravity = 0.5;
+                this.jumpPower = -15;
+                
+                // Efeitos visuais
+                this.scale = 1;
+                this.rotation = 0;
+                this.jumpEffect = 0;
+            }
+            
+            // Atualizar o estado do jogador
+            update(deltaTime) {
+                // Atualizar animação
+                this.frameTimer += deltaTime;
+                if (this.frameTimer > this.frameInterval) {
+                    this.currentFrame = (this.currentFrame + 1) % this.totalFrames;
+                    this.frameTimer = 0;
+                }
+                
+                // Atualizar pulo
+                if (this.isJumping) {
+                    this.y += this.jumpVelocity;
+                    this.jumpVelocity += this.gravity;
+                    
+                    // Efeito visual durante o pulo
+                    this.jumpEffect = Math.sin(this.jumpVelocity * 0.1) * 0.1;
+                    
+                    // Rotação durante o pulo
+                    if (this.jumpVelocity < 0) {
+                        // Subindo
+                        this.rotation = -0.1;
+                    } else {
+                        // Caindo
+                        this.rotation = 0.1;
+                    }
+                    
+                    // Verificar se o jogador voltou ao chão
+                    if (this.y >= this.groundY) {
+                        this.y = this.groundY;
+                        this.isJumping = false;
+                        this.jumpVelocity = 0;
+                        this.rotation = 0;
+                        
+                        // Efeito de "squash" ao pousar
+                        this.scale = 1.2;
+                        setTimeout(() => {
+                            this.scale = 1;
+                        }, 100);
+                    }
+                } else {
+                    // Resetar efeitos visuais quando não estiver pulando
+                    this.jumpEffect = 0;
+                    this.rotation = 0;
+                    
+                    // Normalizar a escala gradualmente
+                    if (this.scale > 1) {
+                        this.scale -= 0.05;
+                    }
+                }
+            }
+            
+            // Desenhar o jogador
+            draw() {
+                const ctx = this.game.ctx;
+                
+                ctx.save();
+                
+                // Aplicar transformações (rotação e escala)
+                ctx.translate(this.x, this.y - this.height/2);
+                ctx.rotate(this.rotation);
+                ctx.scale(1, this.scale);
+                ctx.translate(-this.x, -(this.y - this.height/2));
+                
+                if (this.isJumping) {
+                    // Desenhar sprite de pulo
+                    ctx.drawImage(
+                        this.jumpSprite,
+                        0, 0, this.frameWidth, this.frameHeight,
+                        this.x - this.width/2, this.y - this.height, this.width, this.height
+                    );
+                    
+                    // Efeito de rastro durante o pulo
+                    ctx.globalAlpha = 0.3;
+                    ctx.drawImage(
+                        this.jumpSprite,
+                        0, 0, this.frameWidth, this.frameHeight,
+                        this.x - this.width/2 - 5, this.y - this.height + 5, this.width, this.height
+                    );
+                    ctx.globalAlpha = 1;
+                } else {
+                    // Desenhar frame atual da animação de corrida
+                    ctx.drawImage(
+                        this.runSpriteSheet,
+                        this.currentFrame * this.frameWidth, 0, this.frameWidth, this.frameHeight,
+                        this.x - this.width/2, this.y - this.height, this.width, this.height
+                    );
+                }
+                
+                ctx.restore();
+                
+                // Desenhar hitbox (para debug)
+                // ctx.strokeStyle = 'red';
+                // ctx.strokeRect(this.x - this.width/2 + 10, this.y - this.height + 10, this.width - 20, this.height - 10);
+            }
+            
+            // Fazer o jogador pular
+            jump() {
+                if (!this.isJumping) {
+                    this.isJumping = true;
+                    this.jumpVelocity = this.jumpPower;
+                    
+                    // Efeito de "stretch" ao iniciar o pulo
+                    this.scale = 0.8;
+                }
+            }
+            
+            // Verificar colisão com obstáculo
+            checkCollision(obstacle) {
+                // Hitbox simplificada para melhor jogabilidade
+                const playerHitbox = {
+                    x: this.x - this.width/2 + 10,
+                    y: this.y - this.height + 10,
+                    width: this.width - 20,
+                    height: this.height - 10
+                };
+                
+                const obstacleHitbox = {
+                    x: obstacle.x + 5,
+                    y: obstacle.y + 5,
+                    width: obstacle.width - 10,
+                    height: obstacle.height - 5
+                };
+                
+                return playerHitbox.x < obstacleHitbox.x + obstacleHitbox.width &&
+                       playerHitbox.x + playerHitbox.width > obstacleHitbox.x &&
+                       playerHitbox.y < obstacleHitbox.y + obstacleHitbox.height &&
+                       playerHitbox.y + playerHitbox.height > obstacleHitbox.y;
+            }
+        }
+
+        // Classe de fundo com parallax
+        class Background {
+            constructor(game, layers) {
+                this.game = game;
+                this.layers = layers;
+                
+                // Inicializar posições das camadas
+                this.layers.forEach(layer => {
+                    layer.x = 0;
+                    layer.width = game.canvas.width;
+                });
+                
+                // Cores para o céu gradiente
+                this.skyGradient = this.game.ctx.createLinearGradient(0, 0, 0, this.game.canvas.height - 40);
+                this.skyGradient.addColorStop(0, '#000033');
+                this.skyGradient.addColorStop(1, '#330033');
+                
+                // Estrelas para o fundo
+                this.stars = [];
+                this.generateStars();
+            }
+            
+            // Gerar estrelas aleatórias para o fundo
+            generateStars() {
+                const numStars = Math.floor(this.game.canvas.width * this.game.canvas.height / 1000);
+                for (let i = 0; i < numStars; i++) {
+                    this.stars.push({
+                        x: Math.random() * this.game.canvas.width,
+                        y: Math.random() * (this.game.canvas.height - 40),
+                        size: Math.random() * 2 + 1,
+                        speed: Math.random() * 0.2 + 0.1
+                    });
+                }
+            }
+            
+            // Atualizar posições das camadas
+            update(deltaTime, gameSpeed) {
+                // Atualizar estrelas
+                this.stars.forEach(star => {
+                    star.x -= star.speed * gameSpeed;
+                    if (star.x < 0) {
+                        star.x = this.game.canvas.width;
+                        star.y = Math.random() * (this.game.canvas.height - 40);
+                    }
+                });
+                
+                // Atualizar camadas de parallax
+                this.layers.forEach(layer => {
+                    // Mover a camada com base na velocidade do jogo e na velocidade da camada
+                    layer.x -= gameSpeed * layer.speed;
+                    
+                    // Resetar a posição quando a camada sair completamente da tela
+                    if (layer.x <= -this.game.canvas.width) {
+                        layer.x = 0;
+                    }
+                });
+            }
+            
+            // Desenhar todas as camadas
+            draw() {
+                const ctx = this.game.ctx;
+                
+                // Desenhar o céu gradiente
+                ctx.fillStyle = this.skyGradient;
+                ctx.fillRect(0, 0, this.game.canvas.width, this.game.canvas.height - 40);
+                
+                // Desenhar estrelas
+                ctx.fillStyle = '#ffffff';
+                this.stars.forEach(star => {
+                    ctx.globalAlpha = Math.random() * 0.5 + 0.5; // Efeito de brilho
+                    ctx.beginPath();
+                    ctx.arc(star.x, star.y, star.size, 0, Math.PI * 2);
+                    ctx.fill();
+                });
+                ctx.globalAlpha = 1;
+                
+                // Desenhar camadas de parallax
+                this.layers.forEach(layer => {
+                    // Verificar se a imagem está carregada
+                    if (layer.image) {
+                        // Desenhar a camada atual
+                        ctx.drawImage(
+                            layer.image,
+                            layer.x, 0, this.game.canvas.width, this.game.canvas.height - 40
+                        );
+                        
+                        // Desenhar uma cópia da camada para criar um loop contínuo
+                        ctx.drawImage(
+                            layer.image,
+                            layer.x + this.game.canvas.width, 0, this.game.canvas.width, this.game.canvas.height - 40
+                        );
+                    }
+                });
+                
+                // Desenhar o chão
+                const groundGradient = ctx.createLinearGradient(0, this.game.canvas.height - 40, 0, this.game.canvas.height);
+                groundGradient.addColorStop(0, '#333333');
+                groundGradient.addColorStop(1, '#111111');
+                ctx.fillStyle = groundGradient;
+                ctx.fillRect(0, this.game.canvas.height - 40, this.game.canvas.width, 40);
+                
+                // Desenhar linha do chão
+                ctx.strokeStyle = '#444444';
+                ctx.lineWidth = 2;
+                ctx.beginPath();
+                ctx.moveTo(0, this.game.canvas.height - 40);
+                ctx.lineTo(this.game.canvas.width, this.game.canvas.height - 40);
+                ctx.stroke();
+            }
+        }
+
+        // Classe de obstáculos
+        class Obstacle {
+            constructor(game, x, y, width, height, image, type) {
+                this.game = game;
+                this.x = x;
+                this.y = y;
+                this.width = width;
+                this.height = height;
+                this.image = image;
+                this.type = type;
+                
+                // Adicionar variação aleatória para obstáculos
+                this.scale = Math.random() * 0.2 + 0.9; // Escala entre 0.9 e 1.1
+                this.width *= this.scale;
+                this.height *= this.scale;
+                
+                // Animação para obstáculos
+                this.frameTimer = 0;
+                this.frameInterval = 200; // Tempo entre frames em ms
+                this.rotation = 0;
+                this.rotationSpeed = (Math.random() - 0.5) * 0.02; // Rotação aleatória
+                
+                // Efeito visual
+                this.opacity = 1;
+                this.fadeIn = true;
+                this.fadeSpeed = 0.01;
+            }
+            
+            // Atualizar posição e animação do obstáculo
+            update(deltaTime, gameSpeed) {
+                this.x -= gameSpeed;
+                
+                // Atualizar animação
+                this.frameTimer += deltaTime;
+                if (this.frameTimer > this.frameInterval) {
+                    this.frameTimer = 0;
+                    
+                    // Efeito de pulsação para obstáculos
+                    if (this.type === 'medium') {
+                        this.rotation += this.rotationSpeed;
+                    }
+                    
+                    // Efeito de fade para obstáculos
+                    if (this.fadeIn) {
+                        this.opacity += this.fadeSpeed;
+                        if (this.opacity >= 1) {
+                            this.opacity = 1;
+                            this.fadeIn = false;
+                        }
+                    } else {
+                        this.opacity -= this.fadeSpeed;
+                        if (this.opacity <= 0.7) {
+                            this.opacity = 0.7;
+                            this.fadeIn = true;
+                        }
+                    }
+                }
+            }
+            
+            // Desenhar o obstáculo
+            draw() {
+                const ctx = this.game.ctx;
+                
+                ctx.save();
+                
+                // Aplicar opacidade
+                ctx.globalAlpha = this.opacity;
+                
+                // Aplicar rotação para obstáculos médios
+                if (this.type === 'medium') {
+                    ctx.translate(this.x + this.width/2, this.y + this.height/2);
+                    ctx.rotate(this.rotation);
+                    ctx.translate(-(this.x + this.width/2), -(this.y + this.height/2));
+                }
+                
+                if (this.image) {
+                    ctx.drawImage(
+                        this.image,
+                        this.x, this.y, this.width, this.height
+                    );
+                } else {
+                    // Fallback se a imagem não estiver disponível
+                    ctx.fillStyle = '#ff0000';
+                    ctx.fillRect(this.x, this.y, this.width, this.height);
+                }
+                
+                // Efeito de sombra para obstáculos
+                ctx.shadowColor = '#000';
+                ctx.shadowBlur = 10;
+                ctx.shadowOffsetX = 5;
+                ctx.shadowOffsetY = 5;
+                
+                // Desenhar hitbox (para debug)
+                // ctx.strokeStyle = 'green';
+                // ctx.strokeRect(this.x + 5, this.y + 5, this.width - 10, this.height - 5);
+                
+                ctx.restore();
+            }
+        }
+
+        // Inicializar o jogo quando a página carregar
+        window.addEventListener('load', () => {
+            const game = new Game();
+            
+            // Adicionar ao objeto window para acesso via console (para debug)
+            window.game = game;
+            
+            // Prevenir comportamentos padrão que podem interferir com o jogo em dispositivos móveis
+            document.addEventListener('contextmenu', (e) => e.preventDefault());
+            document.addEventListener('touchmove', (e) => {
+                if (e.touches.length > 1) {
+                    e.preventDefault();
+                }
+            }, { passive: false });
+        });
+    </script>
+</body>
+</html>
